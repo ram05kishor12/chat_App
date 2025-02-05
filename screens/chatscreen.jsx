@@ -18,8 +18,6 @@ import {
   Share,
   PermissionsAndroid,
 } from 'react-native';
-// import MapView, { Marker } from "react-native-maps";
-// import Geolocation from '@react-native-community/geolocation';
 import DocumentPicker from 'react-native-document-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
@@ -144,93 +142,6 @@ const ChatScreen = ({ route, navigation }) => {
   }, [chatId, currentUser]);
 
   // Location Handlers
-  // const requestLocationPermission = async () => {
-  //   try {
-  //     if (Platform.OS === 'android') {
-  //       const granted = await PermissionsAndroid.request(
-  //         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-  //         {
-  //           title: 'Location Permission',
-  //           message: 'This app needs access to your location to share it in chat.',
-  //           buttonNeutral: 'Ask Me Later',
-  //           buttonNegative: 'Cancel',
-  //           buttonPositive: 'OK',
-  //         }
-  //       );
-  //       return granted === PermissionsAndroid.RESULTS.GRANTED;
-  //     }
-  //     return true;
-  //   } catch (err) {
-  //     console.warn(err);
-  //     return false;
-  //   }
-  // };
-
-  // const getCurrentLocation = () => {
-  //   return new Promise((resolve, reject) => {
-  //     Geolocation.getCurrentPosition(
-  //       (position) => {
-  //         resolve({
-  //           latitude: position.coords.latitude,
-  //           longitude: position.coords.longitude,
-  //         });
-  //       },
-  //       (error) => {
-  //         console.error('Location error:', error);
-  //         reject(error);
-  //       },
-  //       {
-  //         enableHighAccuracy: false,
-  //         timeout: 50000,
-  //         maximumAge: 10000,
-  //     }
-  //     );
-  //   });
-  // };
-
-  // const sendLocation = async () => {
-  //   try {
-  //     const hasPermission = await requestLocationPermission();
-  //     if (!hasPermission) {
-  //       Alert.alert('Permission Denied', 'Location permission is required to share your location.');
-  //       return;
-  //     }
-
-  //     setIsLoading(true);
-  //     const location = await getCurrentLocation();
-
-  //     const messageData = {
-  //       type: 'location',
-  //       sender: currentUser.uid,
-  //       locationData: {
-  //         latitude: location.latitude,
-  //         longitude: location.longitude,
-  //       },
-  //       createdAt: firestore.FieldValue.serverTimestamp(),
-  //     };
-
-  //     await firestore()
-  //       .collection('chats')
-  //       .doc(chatId)
-  //       .collection('messages')
-  //       .add(messageData);
-
-  //     await firestore()
-  //       .collection('chats')
-  //       .doc(chatId)
-  //       .update({
-  //         lastMessage: '📍 Location shared',
-  //         updatedAt: firestore.FieldValue.serverTimestamp()
-  //       });
-
-  //     scrollToBottom();
-  //   } catch (error) {
-  //     console.error('Send location error:', error);
-  //     Alert.alert('Error', 'Failed to share location');
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
 
   // Message Handlers
   const sendMessage = async () => {
@@ -409,37 +320,7 @@ const ChatScreen = ({ route, navigation }) => {
                   : "bg-gray-100 rounded-bl-sm mr-2"
               }`}
             >
-              {item.type === "location" && item.locationData ? (
-                <TouchableOpacity onPress={() => handleLocationPress(item.locationData)}>
-                  <View>
-                    {/* <MapView
-                      style={{ width: 200, height: 150, borderRadius: 10 }}
-                      initialRegion={{
-                        latitude: item.locationData.latitude,
-                        longitude: item.locationData.longitude,
-                        latitudeDelta: 0.01,
-                        longitudeDelta: 0.01,
-                      }}
-                      scrollEnabled={false}
-                      zoomEnabled={false}
-                      pitchEnabled={false}
-                      rotateEnabled={false}
-                    >
-                      <Marker
-                        coordinate={{
-                          latitude: item.locationData.latitude,
-                          longitude: item.locationData.longitude,
-                        }}
-                      />
-                    </MapView> */}
-                    <Text 
-                      className={`mt-2 text-sm ${isCurrentUser ? "text-white" : "text-gray-600"}`}
-                    >
-                      📍 Tap to open in Maps
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ) : item.type === "image" ? (
+              {item.type === "image" ? (
                 <TouchableOpacity
                   onPress={() =>
                     setModalState({
@@ -582,9 +463,6 @@ const ChatScreen = ({ route, navigation }) => {
             <TouchableOpacity onPress={handleFileUpload} className="mr-3">
               <Icon name="image" size={24} color="#666" />
             </TouchableOpacity>
-            {/* <TouchableOpacity onPress={sendLocation} className="mr-3">
-              <Icon name="location" size={24} color="#666" />
-            </TouchableOpacity> */}
             <TextInput
               value={text}
               onChangeText={setText}

@@ -1,4 +1,3 @@
-// MessagingScreen.js
 import React, { useEffect, useState, useCallback, memo } from 'react';
 import {
   View,
@@ -11,16 +10,18 @@ import {
   Alert,
   Modal,
   ScrollView,
+  StyleSheet,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 // Chat/Group List Item Component
 const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
   const formatTime = (timestamp) => {
-    if (!timestamp) return ''
+    if (!timestamp) return '';
     try {
       return timestamp.toDate().toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -33,7 +34,16 @@ const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
   };
 
   const unreadCount = chatInfo?.unreadCount || (item.unreadCount || 0);
-  const lastMessage = isGroup ? item.lastMessage : (chatInfo?.lastMessage || 'Start a conversation');
+  const getMessageText = () => {
+    if (isGroup) {
+      if (item.lastMessageType === 'image') return '📷 Image';
+      return item.lastMessage || 'No messages yet';
+    } else {
+      if (chatInfo?.messageType === 'image') return '📷 Image';
+      return chatInfo?.lastMessage || 'Start a conversation';
+    }
+  };
+  const lastMessage = getMessageText();
   const timestamp = isGroup ? item.lastMessageTime : chatInfo?.timestamp;
 
   return (
@@ -73,7 +83,8 @@ const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
   );
 });
 
-export default function MessagingScreen({ navigation }) {
+const ChatScreen = ({ navigation }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('messages');
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -86,6 +97,7 @@ export default function MessagingScreen({ navigation }) {
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState([]);
 
+  // Authentication effect
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged((user) => {
       setCurrentUser(user);
@@ -94,6 +106,7 @@ export default function MessagingScreen({ navigation }) {
     return unsubscribe;
   }, []);
 
+  // Main data fetching effect
   useEffect(() => {
     if (!currentUser) return;
 
@@ -103,7 +116,7 @@ export default function MessagingScreen({ navigation }) {
 
     const setupSubscriptions = async () => {
       try {
-        // Fetch users
+        // Users subscription
         usersUnsubscribe = firestore()
           .collection('users')
           .where('userId', '!=', currentUser.uid)
@@ -120,7 +133,7 @@ export default function MessagingScreen({ navigation }) {
             updateFilteredItems(usersList, groups, searchTerm);
           });
 
-        // Fetch chats
+        // Chats subscription
         chatsUnsubscribe = firestore()
           .collection('chats')
           .where('users', 'array-contains', currentUser.uid)
@@ -150,6 +163,7 @@ export default function MessagingScreen({ navigation }) {
                 chatUpdates[otherUserId] = {
                   chatId: chatDoc.id,
                   lastMessage: lastMessage.text,
+                  messageType: lastMessage.type || 'text',
                   timestamp: lastMessage.createdAt,
                   unreadCount: chatData.unreadCount?.[currentUser.uid] || 0
                 };
@@ -162,7 +176,7 @@ export default function MessagingScreen({ navigation }) {
             });
           });
 
-        // Fetch groups
+        // Groups subscription
         groupsUnsubscribe = firestore()
           .collection('groups')
           .where('participants', 'array-contains', currentUser.uid)
@@ -170,7 +184,8 @@ export default function MessagingScreen({ navigation }) {
             const groupsList = querySnapshot.docs.map(doc => ({
               id: doc.id,
               ...doc.data(),
-              lastMessage: 'No messages yet'
+              lastMessage: 'No messages yet',
+              lastMessageType: 'text'
             }));
 
             const updatedGroups = await Promise.all(groupsList.map(async (group) => {
@@ -186,6 +201,7 @@ export default function MessagingScreen({ navigation }) {
               return {
                 ...group,
                 lastMessage: lastMessage?.text || 'No messages yet',
+                lastMessageType: lastMessage?.type || 'text',
                 lastMessageTime: lastMessage?.createdAt || null,
                 unreadCount: group.unreadCount?.[currentUser.uid] || 0
               };
@@ -210,6 +226,7 @@ export default function MessagingScreen({ navigation }) {
     };
   }, [currentUser]);
 
+  // Filter items effect
   const updateFilteredItems = useCallback((usersList, groupsList, search) => {
     const items = activeTab === 'messages' ? usersList : groupsList;
     if (!search) {
@@ -237,7 +254,7 @@ export default function MessagingScreen({ navigation }) {
           id: item.id,
           name: item.name,
         },
-        chatId: chatData[item.id]?.chatId,
+        chatId: chatData[item.id]?.chatId
       });
     } else {
       navigation.navigate('GroupChat', {
@@ -270,6 +287,9 @@ export default function MessagingScreen({ navigation }) {
         createdAt: firestore.FieldValue.serverTimestamp(),
         participants: [...selectedUsers.map(user => user.id), currentUser.uid],
         admins: [currentUser.uid],
+        lastMessage: 'Group created',
+        lastMessageType: 'text',
+        lastMessageTime: firestore.FieldValue.serverTimestamp()
       };
 
       await firestore()
@@ -367,7 +387,7 @@ export default function MessagingScreen({ navigation }) {
       <View className="bg-purple-600">
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-6">
-          <Text className="text-2xl font-bold text-white">Messages</Text>
+          <Text className="text-2xl font-bold text-white">{t('chat')}</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
             <Icon name="ellipsis-vertical" size={20} color="white" />
           </TouchableOpacity>
@@ -382,7 +402,7 @@ export default function MessagingScreen({ navigation }) {
               value={searchTerm}
               onChangeText={handleSearch}
               className="flex-1 ml-2 text-base"
-              placeholderTextColor={'#666'}
+              placeholderTextColor="#666"
             />
           </View>
         </View>
@@ -403,15 +423,15 @@ export default function MessagingScreen({ navigation }) {
             onPress={() => setActiveTab('groups')}
             className={`flex-1 items-center py-2 border-b-2 ${
               activeTab === 'groups' ? 'border-white' : 'border-transparent'
-            }`}
-          >
+            }`} >
             <Text className={`text-white ${
               activeTab === 'groups' ? 'font-bold' : ''
-            }`}>Story</Text>
+            }`}>Groups</Text>
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* Message/Group List */}
       <FlatList
         data={filteredItems}
         keyExtractor={item => item.id}
@@ -439,22 +459,24 @@ export default function MessagingScreen({ navigation }) {
         }
       />
 
-      <TouchableOpacity
-              onPress={() => setShowCreateGroup(true)}
-              className="absolute bottom-6 right-6 bg-purple-600 w-14 h-14 rounded-full justify-center items-center shadow-lg"
-            >
-              <Icon name="add" size={30} color="white" />
-            </TouchableOpacity>
+      {/* Create Group Button */}
+      {activeTab === 'groups' && (
+        <TouchableOpacity
+          onPress={() => setShowCreateGroup(true)}
+          className="absolute bottom-6 right-6 bg-purple-600 w-14 h-14 rounded-full justify-center items-center shadow-lg"
+        >
+          <Icon name="add" size={30} color="white" />
+        </TouchableOpacity>
+      )}
 
+      {/* Group Creation Modal */}
       {renderGroupModal()}
     </SafeAreaView>
   );
-}
+};
 
-// Create a separate styles file: styles.js
-import { StyleSheet } from 'react-native';
-
-export const styles = StyleSheet.create({
+// Styles
+const styles = StyleSheet.create({
   shadowLight: {
     shadowColor: '#000',
     shadowOffset: {
@@ -466,3 +488,5 @@ export const styles = StyleSheet.create({
     elevation: 3,
   },
 });
+
+export default ChatScreen;

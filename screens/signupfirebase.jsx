@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { auth, db } from '../services/firebaseConfig';
 import Toast from 'react-native-toast-message';
-// import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { I18nManager } from 'react-native';
 
 const SignupFirebase = ({ navigation }) => {
@@ -11,9 +11,9 @@ const SignupFirebase = ({ navigation }) => {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  // const { t } = useTranslation();
-  // const { i18n } = useTranslation();
-  // const isRTL = I18nManager.isRTL || ['ar'].includes(i18n.language);
+  const { t } = useTranslation();
+  const { i18n } = useTranslation();
+  const isRTL = I18nManager.isRTL || ['ar'].includes(i18n.language);
 
 
   const handleSignup = async () => {
@@ -72,9 +72,9 @@ const SignupFirebase = ({ navigation }) => {
             <View className="bg-purple-100 w-20 h-20 rounded-2xl items-center justify-center mb-4">
               <Icon name="person-add-outline" size={40} color="#6b46c1" />
             </View>
-            <Text className="text-3xl font-bold text-gray-900">'createaccount'</Text>
+            <Text className="text-3xl font-bold text-gray-900">{t('createaccount')}</Text>
             <Text className="text-base text-gray-600 mt-2 text-center">
-              signuptostartchattingwithyourteam
+              {t('signuptostartchattingwithyourteam')}
             </Text>
           </View>
 
@@ -82,7 +82,7 @@ const SignupFirebase = ({ navigation }) => {
           <View className="">
             {/* Name Input */}
             <View>
-              <Text className="text-lg font-bold text-gray-700">'name'</Text>
+              <Text className="text-lg font-bold text-gray-700">{t('name')}</Text>
               <View className="bg-gray-50 rounded-xl p-1 px-4 flex-row items-center border border-gray-200 mt-2">
                 <Icon name="person-outline" size={20} color="#6b46c1" style={{ marginRight: 10 }} />
                 <TextInput
@@ -97,7 +97,7 @@ const SignupFirebase = ({ navigation }) => {
 
             {/* Email Input */}
             <View className="mt-4">
-              <Text className="text-lg font-bold text-gray-700">'email'</Text>
+              <Text className="text-lg font-bold text-gray-700">{t('email')}</Text>
               <View className="bg-gray-50 rounded-xl p-1 px-4 flex-row items-center border border-gray-200 mt-2">
                 <Icon name="mail-outline" size={20} color="#6b46c1" style={{ marginRight: 10 }} />
                 <TextInput
@@ -109,7 +109,7 @@ const SignupFirebase = ({ navigation }) => {
                   autoCapitalize="none"
                   placeholderTextColor="#9CA3AF"
                   autoComplete="email"
-                  // style={{ textAlign: isRTL ? 'right' : 'left' , writingDirection: isRTL ? 'rtl' : 'ltr' }}
+                  style={{ textAlign: isRTL ? 'right' : 'left' , writingDirection: isRTL ? 'rtl' : 'ltr' }}
                   // 
                   
                 />
@@ -118,7 +118,7 @@ const SignupFirebase = ({ navigation }) => {
 
             {/* Password Input */}
             <View className="mt-4">
-              <Text className="text-lg font-bold text-gray-700">'password</Text>
+              <Text className="text-lg font-bold text-gray-700">{t('password')}</Text>
               <View className="bg-gray-50 rounded-xl p-1 px-4 flex-row items-center border border-gray-200 mt-2">
                 <Icon name="lock-closed-outline" size={20} color="#6b46c1" style={{ marginRight: 10 }} />
                 <TextInput
@@ -129,7 +129,7 @@ const SignupFirebase = ({ navigation }) => {
                   onChangeText={setPassword}
                   placeholderTextColor="#9CA3AF"
                   autoComplete="password"
-                  // textAlign={isRTL ? 'right' : 'left'}
+                  textAlign={isRTL ? 'right' : 'left'}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
@@ -148,16 +148,16 @@ const SignupFirebase = ({ navigation }) => {
           >
             <View className="flex-row justify-center items-center gap-4">
               <Icon name="person-add-outline" size={20} color="white" />
-              <Text className="text-white font-semibold text-base">'sigin'</Text>
+              <Text className="text-white font-semibold text-base">{t('sigin')}</Text>
             </View>
           </TouchableOpacity>
 
           {/* Log In Section */}
           <View className="mt-6">
             <Text className="text-center text-gray-600">
-               alreadyhaveaccount{' '}
+               {t('alreadyhaveaccount')}{' '}
               <Text className="text-purple-600 font-semibold" onPress={() => navigation.navigate('Login')}>
-                'login'
+                {t('login')}
               </Text>
             </Text>
           </View>

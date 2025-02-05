@@ -13,16 +13,16 @@ import {
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import Toast from 'react-native-toast-message';
-// import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const LoginFirebase = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  // const { t } = useTranslation();
-  // const { i18n} = useTranslation();
-  // const isRTL = I18nManager.isRTL || ['ar'].includes(i18n.language);
+  const { t } = useTranslation();
+  const { i18n} = useTranslation();
+  const isRTL = I18nManager.isRTL || ['ar'].includes(i18n.language);
 
   const handleLogin = async () => {
     try {
@@ -81,9 +81,9 @@ const LoginFirebase = ({ navigation }) => {
               <View className="bg-purple-100 w-20 h-20 rounded-2xl items-center justify-center mb-4">
                 <Icon name="chatbubbles" size={40} color="#6b46c1" />
               </View>
-              <Text className="text-3xl font-bold text-gray-900">'welcome'</Text>
+              <Text className="text-3xl font-bold text-gray-900">{t('welcome')}</Text>
               <Text className="text-base text-gray-600 mt-2 text-center">
-                sigintocontinuechattingwithyourteam
+                {t('sigintocontinuechattingwithyourteam')}
               </Text>
             </View>
 
@@ -91,7 +91,7 @@ const LoginFirebase = ({ navigation }) => {
             <View className="">
               {/* Email Input */}
               <View>
-                <Text className="text-lg font-bold text-gray-700">'email'</Text>
+                <Text className="text-lg font-bold text-gray-700">{t('email')}</Text>
                 <View className="bg-gray-50 rounded-xl p-1 px-4 flex-row items-center border border-gray-200 mt-2">
                   <Icon name="mail-outline" size={20} color="#6b46c1" style={{ marginRight: 10 }} />
                   <TextInput
@@ -103,15 +103,15 @@ const LoginFirebase = ({ navigation }) => {
                     autoCapitalize="none"
                     placeholderTextColor="#9CA3AF"
                     autoComplete="email"
-                    // writingDirection={isRTL ? 'rtl' : 'ltr'}
-                    // textAlign={isRTL ? 'right' : 'left'}
+                    writingDirection={isRTL ? 'rtl' : 'ltr'}
+                    textAlign={isRTL ? 'right' : 'left'}
                   />
                 </View>
               </View>
 
               {/* Password Input */}
               <View className='mt-4'>
-                <Text className="text-lg font-bold text-gray-700">'password'</Text>
+                <Text className="text-lg font-bold text-gray-700">{t('password')}</Text>
                 <View className="bg-gray-50 rounded-xl p-1 px-4 flex-row items-center border border-gray-200 mt-2">
                   <Icon name="lock-closed-outline" size={20} color="#6b46c1" style={{ marginRight: 10 }} />
                   <TextInput
@@ -122,8 +122,8 @@ const LoginFirebase = ({ navigation }) => {
                     onChangeText={setPassword}
                     placeholderTextColor="#9CA3AF"
                     autoComplete="password"
-                    // writingDirection={isRTL ? 'rtl' : 'ltr'}
-                    // textAlign={isRTL ? 'right' : 'left'}
+                    writingDirection={isRTL ? 'rtl' : 'ltr'}
+                    textAlign={isRTL ? 'right' : 'left'}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
@@ -137,7 +137,7 @@ const LoginFirebase = ({ navigation }) => {
               {/* Forgot Password */}
               <View className="flex justify-end">
               <TouchableOpacity className="mt-2 self-end" onPress={()=> {}}>
-                <Text className="text-purple-600 text-base font-semibold">'forgotpassword'</Text>
+                <Text className="text-purple-600 text-base font-semibold">{t('forgotpassword')}</Text>
               </TouchableOpacity>
               </View>
 
@@ -148,16 +148,16 @@ const LoginFirebase = ({ navigation }) => {
               >
                 <View className="flex-row justify-center items-center gap-4">
                   <Icon name="log-in-outline" size={20} color="white" />
-                  <Text className="text-white font-semibold text-base">'login'</Text>
+                  <Text className="text-white font-semibold text-base">{t('login')}</Text>
                 </View>
               </TouchableOpacity>
 
               {/* Sign Up Link */}
               <View className="mt-6">
                 <Text className="text-center text-gray-600">
-                   alreadyhaveaccount{' '}
+                   {t('alreadyhaveaccount')}{' '}
                   <Text className="text-purple-600 font-semibold" onPress={() => navigation.navigate('SignUp')}>
-                    'sigin'
+                    {t('sigin')}
                   </Text>
                 </Text>
               </View>

@@ -2,31 +2,32 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-// import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 
 // Import screens
 import ChatListScreen from '../screens/chatlist';
 import CommunityScreen from '../screens/grouplist';
-// import SettingsScreen from '../screens/settings';
+import SettingsScreen from '../screens/settings';
 
 const Tab = createBottomTabNavigator();
 
-// function CustomHeader({ title, navigation }) {
-//   return (
-//     <View className="flex-row justify-between items-center px-4 py-3 bg-white shadow-md border-b border-gray-300">
-//       {/* Title */}
-//       <Text className="text-xl font-semibold text-purple-700">Settings</Text>
+function CustomHeader({ title, navigation }) {
+  return (
+    <View className="flex-row justify-between items-center px-4 py-3 bg-white shadow-md border-b border-gray-300">
+      {/* Title */}
+      <Text className="text-xl font-semibold text-purple-700">{title}</Text>
 
-//       {/* Profile / Settings Icon */}
-//       <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-//         <Icon name="person-circle" size={28} color="#8B3DFF" />
-//       </TouchableOpacity>
-//     </View>
-//   );
-// }
+      {/* Profile / Settings Icon */}
+      <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+        <Icon name="person-circle" size={28} color="#8B3DFF" />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 function TabNavigator() {
-  // const { t } = useTranslation();
+  
+  const { t } = useTranslation();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -46,7 +47,7 @@ function TabNavigator() {
       }}
     >
       <Tab.Screen 
-        name='chat'
+        name={t('chat')}
         component={ChatListScreen}
         options={({ navigation }) => ({
           headerShown: false,
@@ -57,13 +58,13 @@ function TabNavigator() {
               color={color}
             />
           ),
-          tabBarLabel: 'chat',
+          tabBarLabel: t('chat'),
           tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
         })}
       />
       
-       <Tab.Screen
-        name='community'
+      <Tab.Screen 
+        name={t('community')}
         component={CommunityScreen}
         options={({ navigation }) => ({
           headerShown: false,
@@ -75,13 +76,13 @@ function TabNavigator() {
               color={color}
             />
           ),
-          tabBarLabel: "community",
+          tabBarLabel: t('community'),
           tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
         })}
       />
 
-      {/* <Tab.Screen 
-        name='settings'
+      <Tab.Screen 
+        name={t('settings')}
         component={SettingsScreen}
         options={({ navigation }) => ({
           headerShown: false,
@@ -93,10 +94,10 @@ function TabNavigator() {
               color={color}
             />
           ),
-          tabBarLabel: 'settings',
+          tabBarLabel: t('settings'),
           tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
         })}
-      /> */}
+      />
     </Tab.Navigator>
   );
 }
