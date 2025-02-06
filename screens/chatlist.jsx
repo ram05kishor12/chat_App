@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, memo } from 'react';
+import React, { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   Alert,
   Modal,
   ScrollView,
-  StyleSheet,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
@@ -18,9 +17,9 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 
-// Chat/Group List Item Component
+// ListItem component
 const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
-  const formatTime = (timestamp) => {
+  const formatTime = useCallback((timestamp) => {
     if (!timestamp) return '';
     try {
       return timestamp.toDate().toLocaleTimeString('en-US', {
@@ -31,10 +30,9 @@ const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
     } catch (error) {
       return '2m ago';
     }
-  };
+  }, []);
 
-  const unreadCount = chatInfo?.unreadCount || (item.unreadCount || 0);
-  const getMessageText = () => {
+  const messageText = useMemo(() => {
     if (isGroup) {
       if (item.lastMessageType === 'image') return '📷 Image';
       return item.lastMessage || 'No messages yet';
@@ -42,14 +40,16 @@ const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
       if (chatInfo?.messageType === 'image') return '📷 Image';
       return chatInfo?.lastMessage || 'Start a conversation';
     }
-  };
-  const lastMessage = getMessageText();
+  }, [isGroup, item.lastMessageType, item.lastMessage, chatInfo]);
+
+  const unreadCount = chatInfo?.unreadCount || (item.unreadCount || 0);
   const timestamp = isGroup ? item.lastMessageTime : chatInfo?.timestamp;
+  const formattedTime = useMemo(() => formatTime(timestamp), [formatTime, timestamp]);
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="flex-row items-center px-4 py-3"
+      className="flex-row items-center px-4 py-3 bg-white"
     >
       <View className="relative">
         {isGroup ? (
@@ -73,12 +73,10 @@ const ListItem = memo(({ item, chatInfo, onPress, isGroup }) => {
       <View className="flex-1 ml-4">
         <Text className="text-base font-semibold">{item.name}</Text>
         <Text className="text-sm text-gray-500" numberOfLines={1}>
-          {lastMessage}
+          {messageText}
         </Text>
       </View>
-      <Text className="text-xs text-gray-400">
-        {formatTime(timestamp)}
-      </Text>
+      <Text className="text-xs text-gray-400">{formattedTime}</Text>
     </TouchableOpacity>
   );
 });
@@ -100,152 +98,147 @@ const ChatScreen = ({ navigation }) => {
   // Authentication effect
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged((user) => {
-      setCurrentUser(user);
-      setIsLoading(false);
+      if (user) {
+        setCurrentUser(user);
+        setIsLoading(false);
+      } else {
+        navigation.replace('Login');
+      }
     });
     return unsubscribe;
-  }, []);
+  }, [navigation]);
 
-  // Main data fetching effect
+  // Users subscription
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.uid) return;
 
-    let usersUnsubscribe;
-    let chatsUnsubscribe;
-    let groupsUnsubscribe;
+    const usersUnsubscribe = firestore()
+      .collection('users')
+      .where('userId', '!=', currentUser.uid)
+      .onSnapshot({
+        next: (snapshot) => {
+          const usersList = snapshot.docs.map(doc => ({
+            id: doc.data().userId,
+            name: doc.data().name,
+            email: doc.data().email,
+          }));
+          setUsers(usersList);
+        },
+        error: (error) => {
+          console.error('Users subscription error:', error);
+          Alert.alert('Error', 'Failed to load users');
+        }
+      });
 
-    const setupSubscriptions = async () => {
-      try {
-        // Users subscription
-        usersUnsubscribe = firestore()
-          .collection('users')
-          .where('userId', '!=', currentUser.uid)
-          .onSnapshot((querySnapshot) => {
-            const usersList = querySnapshot.docs.map(doc => {
-              const userData = doc.data();
-              return {
-                id: userData.userId,
-                name: userData.name,
-                email: userData.email,
+    return () => usersUnsubscribe();
+  }, [currentUser?.uid]);
+
+  // Chats subscription
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const chatsUnsubscribe = firestore()
+      .collection('chats')
+      .where('users', 'array-contains', currentUser.uid)
+      .onSnapshot({
+        next: async (chatSnapshot) => {
+          const updates = {};
+          const promises = chatSnapshot.docs.map(async (doc) => {
+            const chatData = doc.data();
+            const otherUserId = chatData.users.find(id => id !== currentUser.uid);
+
+            const lastMessageQuery = await firestore()
+              .collection('chats')
+              .doc(doc.id)
+              .collection('messages')
+              .orderBy('createdAt', 'desc')
+              .limit(1)
+              .get();
+
+            if (!lastMessageQuery.empty) {
+              const lastMessage = lastMessageQuery.docs[0].data();
+              updates[otherUserId] = {
+                chatId: doc.id,
+                lastMessage: lastMessage.text,
+                messageType: lastMessage.type || 'text',
+                timestamp: lastMessage.createdAt,
+                unreadCount: chatData.unreadCount?.[currentUser.uid] || 0
               };
-            });
-            setUsers(usersList);
-            updateFilteredItems(usersList, groups, searchTerm);
+            }
           });
 
-        // Chats subscription
-        chatsUnsubscribe = firestore()
-          .collection('chats')
-          .where('users', 'array-contains', currentUser.uid)
-          .onSnapshot((chatSnapshot) => {
-            const chatUpdates = {};
+          await Promise.all(promises);
+          setChatData(prev => ({ ...prev, ...updates }));
+        },
+        error: (error) => {
+          console.error('Chats subscription error:', error);
+          Alert.alert('Error', 'Failed to load chats');
+        }
+      });
+
+    return () => chatsUnsubscribe();
+  }, [currentUser?.uid]);
+
+  // Groups subscription
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const groupsUnsubscribe = firestore()
+      .collection('groups')
+      .where('participants', 'array-contains', currentUser.uid)
+      .onSnapshot({
+        next: async (querySnapshot) => {
+          const groupsPromises = querySnapshot.docs.map(async (doc) => {
+            const groupData = doc.data();
             
-            chatSnapshot.docChanges().forEach(async change => {
-              const chatDoc = change.doc;
-              const chatData = chatDoc.data();
-              const otherUserId = chatData.users.find(id => id !== currentUser.uid);
+            const lastMessageSnap = await firestore()
+              .collection('groups')
+              .doc(doc.id)
+              .collection('messages')
+              .orderBy('createdAt', 'desc')
+              .limit(1)
+              .get();
 
-              if (change.type === 'removed') {
-                delete chatUpdates[otherUserId];
-                return;
-              }
-
-              const lastMessageQuery = await firestore()
-                .collection('chats')
-                .doc(chatDoc.id)
-                .collection('messages')
-                .orderBy('createdAt', 'desc')
-                .limit(1)
-                .get();
-
-              if (!lastMessageQuery.empty) {
-                const lastMessage = lastMessageQuery.docs[0].data();
-                chatUpdates[otherUserId] = {
-                  chatId: chatDoc.id,
-                  lastMessage: lastMessage.text,
-                  messageType: lastMessage.type || 'text',
-                  timestamp: lastMessage.createdAt,
-                  unreadCount: chatData.unreadCount?.[currentUser.uid] || 0
-                };
-              }
-
-              setChatData(prev => ({
-                ...prev,
-                ...chatUpdates
-              }));
-            });
-          });
-
-        // Groups subscription
-        groupsUnsubscribe = firestore()
-          .collection('groups')
-          .where('participants', 'array-contains', currentUser.uid)
-          .onSnapshot(async (querySnapshot) => {
-            const groupsList = querySnapshot.docs.map(doc => ({
+            const lastMessage = lastMessageSnap.docs[0]?.data();
+            return {
               id: doc.id,
-              ...doc.data(),
-              lastMessage: 'No messages yet',
-              lastMessageType: 'text'
-            }));
-
-            const updatedGroups = await Promise.all(groupsList.map(async (group) => {
-              const lastMessageSnap = await firestore()
-                .collection('groups')
-                .doc(group.id)
-                .collection('messages')
-                .orderBy('createdAt', 'desc')
-                .limit(1)
-                .get();
-
-              const lastMessage = lastMessageSnap.docs[0]?.data();
-              return {
-                ...group,
-                lastMessage: lastMessage?.text || 'No messages yet',
-                lastMessageType: lastMessage?.type || 'text',
-                lastMessageTime: lastMessage?.createdAt || null,
-                unreadCount: group.unreadCount?.[currentUser.uid] || 0
-              };
-            }));
-
-            setGroups(updatedGroups);
-            updateFilteredItems(users, updatedGroups, searchTerm);
+              ...groupData,
+              lastMessage: lastMessage?.text || 'No messages yet',
+              lastMessageType: lastMessage?.type || 'text',
+              lastMessageTime: lastMessage?.createdAt || groupData.createdAt,
+              unreadCount: groupData.unreadCount?.[currentUser.uid] || 0
+            };
           });
 
-      } catch (error) {
-        console.error('Error setting up subscriptions:', error);
-        Alert.alert('Error', 'Failed to load messages.');
-      }
-    };
+          const groupsList = await Promise.all(groupsPromises);
+          setGroups(groupsList);
+        },
+        error: (error) => {
+          console.error('Groups subscription error:', error);
+          Alert.alert('Error', 'Failed to load groups');
+        }
+      });
 
-    setupSubscriptions();
+    return () => groupsUnsubscribe();
+  }, [currentUser?.uid]);
 
-    return () => {
-      if (usersUnsubscribe) usersUnsubscribe();
-      if (chatsUnsubscribe) chatsUnsubscribe();
-      if (groupsUnsubscribe) groupsUnsubscribe();
-    };
-  }, [currentUser]);
-
-  // Filter items effect
-  const updateFilteredItems = useCallback((usersList, groupsList, search) => {
-    const items = activeTab === 'messages' ? usersList : groupsList;
-    if (!search) {
+  // Filtering effect
+  useEffect(() => {
+    const items = activeTab === 'messages' ? users : groups;
+    if (!searchTerm.trim()) {
       setFilteredItems(items);
     } else {
-      const filtered = items.filter((item) =>
-        item.name?.toLowerCase().includes(search.toLowerCase())
+      const searchLower = searchTerm.toLowerCase();
+      const filtered = items.filter(item =>
+        item.name.toLowerCase().includes(searchLower)
       );
       setFilteredItems(filtered);
     }
-  }, [activeTab]);
+  }, [activeTab, users, groups, searchTerm]);
 
-  useEffect(() => {
-    updateFilteredItems(users, groups, searchTerm);
-  }, [activeTab, searchTerm, updateFilteredItems]);
-
-  const handleSearch = (text) => {
+  const handleSearch = useCallback((text) => {
     setSearchTerm(text);
-  };
+  }, []);
 
   const handleItemPress = useCallback((item) => {
     if (activeTab === 'messages') {
@@ -264,21 +257,14 @@ const ChatScreen = ({ navigation }) => {
     }
   }, [activeTab, chatData, navigation]);
 
-  const generateGroupId = () => {
-    const timestamp = Date.now().toString(36);
-    const randomNum = Math.random().toString(36).substring(2, 8);
-    return `group-${timestamp}-${randomNum}`;
-  };
-
-  const createGroup = async () => {
+  const createGroup = useCallback(async () => {
     if (!newGroupName.trim() || selectedUsers.length === 0) {
       Alert.alert('Error', 'Please enter group name and select members');
       return;
     }
 
     try {
-      const groupId = generateGroupId();
-      await AsyncStorage.setItem('lastGroupId', groupId);
+      const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       const groupData = {
         id: groupId,
@@ -292,81 +278,77 @@ const ChatScreen = ({ navigation }) => {
         lastMessageTime: firestore.FieldValue.serverTimestamp()
       };
 
-      await firestore()
-        .collection('groups')
-        .doc(groupId)
-        .set(groupData);
+      await firestore().collection('groups').doc(groupId).set(groupData);
 
       setShowCreateGroup(false);
       setNewGroupName('');
       setSelectedUsers([]);
 
       navigation.navigate('GroupChat', {
-        groupId: groupId,
+        groupId,
         groupName: newGroupName.trim()
       });
     } catch (error) {
       console.error('Error creating group:', error);
       Alert.alert('Error', 'Failed to create group');
     }
-  };
+  }, [currentUser?.uid, navigation, newGroupName, selectedUsers]);
 
-  const toggleUserSelection = (user) => {
+  const toggleUserSelection = useCallback((user) => {
     setSelectedUsers(prev =>
       prev.find(u => u.id === user.id)
         ? prev.filter(u => u.id !== user.id)
         : [...prev, user]
     );
-  };
+  }, []);
 
-  const renderGroupModal = () => (
+  const renderCreateGroupModal = () => (
     <Modal
       visible={showCreateGroup}
       animationType="slide"
       transparent={true}
+      onRequestClose={() => setShowCreateGroup(false)}
     >
       <View className="flex-1 bg-black/50 justify-center">
-        <View className="bg-white m-5 p-5 rounded-lg">
-          <Text className="text-xl font-bold mb-4">Create New Group</Text>
+        <View className="bg-white mx-4 rounded-lg p-4">
+          <Text className="text-xl font-bold mb-4">{t('Create New Group')}</Text>
+          
           <TextInput
-            placeholder="Group Name"
             value={newGroupName}
             onChangeText={setNewGroupName}
+            placeholder={t('Enter group name')}
             className="border border-gray-300 rounded-lg px-4 py-2 mb-4"
           />
-          <Text className="font-bold mb-2">Select Members:</Text>
+          
           <ScrollView className="max-h-60 mb-4">
             {users.map(user => (
               <TouchableOpacity
                 key={user.id}
                 onPress={() => toggleUserSelection(user)}
-                className={`flex-row items-center p-2 border-b border-gray-200 ${
-                  selectedUsers.find(u => u.id === user.id) ? 'bg-purple-100' : ''
-                }`}
+                className="flex-row items-center py-2"
               >
+                <View className="w-6 h-6 border-2 border-purple-500 rounded-full mr-2 items-center justify-center">
+                  {selectedUsers.find(u => u.id === user.id) && (
+                    <View className="w-4 h-4 bg-purple-500 rounded-full" />
+                  )}
+                </View>
                 <Text>{user.name}</Text>
-                {selectedUsers.find(u => u.id === user.id) && (
-                  <Icon name="checkmark" size={20} color="purple" className="ml-auto" />
-                )}
               </TouchableOpacity>
             ))}
           </ScrollView>
-          <View className="flex-row justify-end">
+          
+          <View className="flex-row justify-end space-x-2">
             <TouchableOpacity
-              onPress={() => {
-                setShowCreateGroup(false);
-                setNewGroupName('');
-                setSelectedUsers([]);
-              }}
-              className="px-4 py-2 mr-2"
+              onPress={() => setShowCreateGroup(false)}
+              className="px-4 py-2 rounded-lg bg-gray-200"
             >
-              <Text className="text-gray-600">Cancel</Text>
+              <Text>{t('Cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={createGroup}
-              className="bg-purple-500 px-4 py-2 rounded-lg"
+              className="px-4 py-2 rounded-lg bg-purple-500"
             >
-              <Text className="text-white">Create</Text>
+              <Text className="text-white">{t('Create')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -376,62 +358,73 @@ const ChatScreen = ({ navigation }) => {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-white justify-center items-center">
-        <Text className="text-lg text-gray-600">Loading...</Text>
-      </SafeAreaView>
+      <View className="flex-1 justify-center items-center">
+        <Text>{t('Loading...')}</Text>
+      </View>
     );
   }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="bg-purple-600">
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-4 py-6">
-          <Text className="text-2xl font-bold text-white">{t('chat')}</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Icon name="ellipsis-vertical" size={20} color="white" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View className="px-4 pb-3 py-1">
-          <View className="flex-row items-center bg-gray-100 rounded-full px-4 py-1">
-            <Icon name="search" size={20} color="#666" />
-            <TextInput
-              placeholder="Search..."
-              value={searchTerm}
-              onChangeText={handleSearch}
-              className="flex-1 ml-2 text-base"
-              placeholderTextColor="#666"
-            />
-          </View>
-        </View>
-
-        {/* Tabs */}
-        <View className="flex-row px-4">
+      {/* Header */}
+      <View className="flex-row items-center justify-between px-4 py-3 bg-purple-600">
+        <Text className="text-2xl font-bold text-white">{t('Chats')}</Text>
+        {activeTab === 'groups' && (
           <TouchableOpacity
-            onPress={() => setActiveTab('messages')}
-            className={`flex-1 items-center py-2 border-b-2 ${
-              activeTab === 'messages' ? 'border-white' : 'border-transparent'
-            }`}
+            onPress={() => setShowCreateGroup(true)}
+            className="p-2"
           >
-            <Text className={`text-white ${
-              activeTab === 'messages' ? 'font-bold' : ''
-            }`}>Message</Text>
+            <Icon name="add-circle-outline" size={24} color="#6B46C1" />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('groups')}
-            className={`flex-1 items-center py-2 border-b-2 ${
-              activeTab === 'groups' ? 'border-white' : 'border-transparent'
-            }`} >
-            <Text className={`text-white ${
-              activeTab === 'groups' ? 'font-bold' : ''
-            }`}>Groups</Text>
-          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Search Bar */}
+      <View className="px-4 py-2 bg-purple-600">
+        <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
+          <Icon name="search-outline" size={20} color="#666" />
+          <TextInput
+            value={searchTerm}
+            onChangeText={handleSearch}
+            placeholder={t('Search')}
+            className="flex-1 ml-2"
+          />
         </View>
       </View>
 
-      {/* Message/Group List */}
+      {/* Tabs */}
+      <View className="flex-row border-b border-gray-200 bg-purple-600">
+        <TouchableOpacity
+          onPress={() => setActiveTab('messages')}
+          className={`flex-1 py-3 ${
+            activeTab === 'messages' ? 'border-b-2 border-white' : ''
+          }`}
+        >
+          <Text
+            className={`text-center ${
+              activeTab === 'messages' ? 'text-white font-bold' : 'text-gray-50'
+            }`}
+          >
+            {t('Messages')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab('groups')}
+          className={`flex-1 py-3 ${
+            activeTab === 'groups' ? 'border-b-2 border-white' : ''
+          }`}
+        >
+          <Text
+            className={`text-center ${
+              activeTab === 'groups' ? 'text-white bold' : 'text-gray-50'
+            }`}
+          >
+            {t('Groups')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Chat List */}
       <FlatList
         data={filteredItems}
         keyExtractor={item => item.id}
@@ -443,50 +436,35 @@ const ChatScreen = ({ navigation }) => {
             isGroup={activeTab === 'groups'}
           />
         )}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={true}
-        contentContainerStyle={{ paddingBottom: 20 }}
-        ListEmptyComponent={
-          <View className="flex-1 justify-center items-center pt-10">
-            <Text className="text-gray-500 text-lg">
-              {activeTab === 'messages'
-                ? 'No messages yet'
-                : 'No groups yet'}
+        ItemSeparatorComponent={() => (
+          <View className="h-[1px] bg-gray-200" />
+        )}
+        ListEmptyComponent={() => (
+          <View className="flex-1 justify-center items-center py-8">
+            <Icon
+              name={activeTab === 'messages' ? 'chatbubbles-outline' : 'people-outline'}
+              size={48}
+              color="#9CA3AF"
+            />
+            <Text className="text-gray-500 mt-2">
+              {searchTerm
+                ? t('No results found')
+                : t(activeTab === 'messages' ? 'No messages yet' : 'No groups yet')}
             </Text>
           </View>
-        }
+        )}
+        refreshing={isLoading}
+        onRefresh={() => {
+          setIsLoading(true);
+          // Refresh logic here - the subscriptions will automatically update
+          setTimeout(() => setIsLoading(false), 1000);
+        }}
       />
 
-      {/* Create Group Button */}
-      {activeTab === 'groups' && (
-        <TouchableOpacity
-          onPress={() => setShowCreateGroup(true)}
-          className="absolute bottom-6 right-6 bg-purple-600 w-14 h-14 rounded-full justify-center items-center shadow-lg"
-        >
-          <Icon name="add" size={30} color="white" />
-        </TouchableOpacity>
-      )}
-
-      {/* Group Creation Modal */}
-      {renderGroupModal()}
+      {/* Create Group Modal */}
+      {renderCreateGroupModal()}
     </SafeAreaView>
   );
 };
-
-// Styles
-const styles = StyleSheet.create({
-  shadowLight: {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-});
 
 export default ChatScreen;

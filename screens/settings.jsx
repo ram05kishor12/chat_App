@@ -7,11 +7,13 @@ import {
   Alert,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import RNRestart from 'react-native-restart';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Ionicons';
+import ReactNativeBiometrics from 'react-native-biometrics';
 import i18n from '../services/arabic';
 
 const SettingsPage = () => {
@@ -19,7 +21,9 @@ const SettingsPage = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const { t } = useTranslation();
+  const rnBiometrics = new ReactNativeBiometrics();
 
   useEffect(() => {
     loadSettings();
@@ -27,17 +31,19 @@ const SettingsPage = () => {
 
   const loadSettings = async () => {
     try {
-      const [lang, dark, notif, sound] = await Promise.all([
+      const [lang, dark, notif, sound, bio] = await Promise.all([
         AsyncStorage.getItem('language'),
         AsyncStorage.getItem('darkMode'),
         AsyncStorage.getItem('notifications'),
-        AsyncStorage.getItem('sound')
+        AsyncStorage.getItem('sound'),
+        AsyncStorage.getItem('biometrics')
       ]);
       
       setIsRTL(lang === 'ar');
       setIsDarkMode(dark === 'true');
       setNotifications(notif !== 'false');
       setSoundEnabled(sound !== 'false');
+      setBiometricsEnabled(bio === 'true');
     } catch (error) {
       console.error('Error loading settings:', error);
     }
@@ -70,9 +76,13 @@ const SettingsPage = () => {
         <View className="flex-row items-center flex-1">
           <Icon name={icon} size={24} color="#6b21a8" className="mr-3" />
           <View className="flex-1 ml-3">
-            <Text className="text-lg font-medium text-gray-800">{title}</Text>
+            <Text className="text-lg font-medium text-gray-800">
+              {title}
+            </Text>
             {description && (
-              <Text className="text-sm text-gray-500 mt-1">{description}</Text>
+              <Text className="text-sm text-gray-500 mt-1">
+                {description}
+              </Text>
             )}
           </View>
         </View>
@@ -101,6 +111,59 @@ const SettingsPage = () => {
     await AsyncStorage.setItem('sound', value.toString());
   };
 
+  const handleBiometrics = async (value) => {
+    try {
+      if (value) {
+        // Check if biometrics are available
+        const { available, biometryType } = await rnBiometrics.isSensorAvailable();
+
+        if (!available) {
+          Alert.alert(
+            t('biometricsNotAvailable'),
+            t('biometricsNotSupportedMessage'),
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        // Show permission dialog
+        Alert.alert(
+          t('enableBiometrics'),
+          t('enableBiometricsMessage'),
+          [
+            {
+              text: t('cancel'),
+              style: 'cancel'
+            },
+            {
+              text: t('enable'),
+              onPress: async () => {
+                // Verify biometrics before enabling
+                const { success } = await rnBiometrics.simplePrompt({
+                  promptMessage: t('verifyBiometrics'),
+                  cancelButtonText: t('cancel')
+                });
+
+                if (success) {
+                  setBiometricsEnabled(true);
+                  await AsyncStorage.setItem('biometrics', 'true');
+                  Alert.alert(t('success'), t('biometricsEnabled'));
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        // Disable biometrics
+        setBiometricsEnabled(false);
+        await AsyncStorage.setItem('biometrics', 'false');
+      }
+    } catch (error) {
+      console.error('Biometric error:', error);
+      Alert.alert(t('error'), t('biometricSetupError'));
+    }
+  };
+
   return (
     <ScrollView className="flex-1 bg-white">
       <View className="bg-purple-600 p-6">
@@ -110,6 +173,18 @@ const SettingsPage = () => {
       </View>
 
       <View className="p-6">
+        <Text className="text-sm font-medium text-purple-700 mb-4 uppercase">
+          {t('security')}
+        </Text>
+
+        <SettingItem
+          icon="finger-print"
+          title={t('biometricAuth')}
+          value={biometricsEnabled}
+          onToggle={handleBiometrics}
+          description={t('biometricDescription')}
+        />
+
         <Text className="text-sm font-medium text-purple-700 mb-4 uppercase">
           {t('preferences')}
         </Text>
