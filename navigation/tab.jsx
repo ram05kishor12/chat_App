@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import ChatListScreen from '../screens/chatlist';
 import CommunityScreen from '../screens/grouplist';
 import SettingsScreen from '../screens/settings';
+import profile from '../screens/profile';
 
 const Tab = createBottomTabNavigator();
 
@@ -64,24 +65,24 @@ function TabNavigator() {
       />
       
       <Tab.Screen 
-        name={t('community')}
-        component={CommunityScreen}
+        name={t('profile')}
+        component={profile}
         options={({ navigation }) => ({
           headerShown: false,
-          header: () => <CustomHeader title={t('community')} navigation={navigation} />,
+          header: () => <CustomHeader title={t('profile')} navigation={navigation} />,
           tabBarIcon: ({ focused, color }) => (
             <Icon 
-              name={focused ? "people" : "people-outline"} 
+              name={focused ? "person" : "person-outline"} 
               size={24} 
               color={color}
             />
           ),
-          tabBarLabel: t('community'),
+          tabBarLabel: t('Profile'),
           tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
         })}
       />
 
-      <Tab.Screen 
+      <Tab.Screen
         name={t('settings')}
         component={SettingsScreen}
         options={({ navigation }) => ({

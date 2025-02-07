@@ -94,6 +94,7 @@ const ChatScreen = ({ navigation }) => {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [profileImage, setProfileImage] = useState(null);
 
   // Authentication effect
   useEffect(() => {
@@ -108,6 +109,24 @@ const ChatScreen = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const userDocRef = firestore().collection('users').doc(currentUser.uid);
+
+    const unsubscribe = userDocRef.collection('images')
+      .limit(1)
+      .onSnapshot(snapshot => {
+        if (!snapshot.empty) {
+          const imageData = snapshot.docs[0].data();
+          setProfileImage(imageData.file);
+        } else {
+          setProfileImage(null);
+        }
+      });
+  
+    return () => unsubscribe();
+  }, [currentUser?.uid]);
   // Users subscription
   useEffect(() => {
     if (!currentUser?.uid) return;

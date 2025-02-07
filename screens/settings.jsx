@@ -115,7 +115,7 @@ const SettingsPage = () => {
     try {
       if (value) {
         // Check if biometrics are available
-        const { available, biometryType } = await rnBiometrics.isSensorAvailable();
+        const { available } = await rnBiometrics.isSensorAvailable();
 
         if (!available) {
           Alert.alert(
