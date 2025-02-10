@@ -13,16 +13,17 @@ import {
   Keyboard,
   Linking,
   Modal,
-  Dimensions,
   ActivityIndicator,
   Share,
   PermissionsAndroid,
+  Dimensions,
 } from 'react-native';
 import DocumentPicker from 'react-native-document-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import RNFS from 'react-native-fs';
+import Geolocation from 'react-native-geolocation-service';
 
 // Date Formatting Utilities
 const formatMessageTime = (date) => {
@@ -65,6 +66,7 @@ const ChatScreen = ({ route, navigation }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [chatId, setChatId] = useState(existingChatId);
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   const flatListRef = useRef(null);
   const [modalState, setModalState] = useState({
     visible: false,
@@ -73,6 +75,11 @@ const ChatScreen = ({ route, navigation }) => {
     error: null,
     imageInfo: null
   });
+
+  // Check location permission on component mount
+  useEffect(() => {
+    checkLocationPermission();
+  }, []);
 
   // Authentication Effect
   useEffect(() => {
@@ -141,7 +148,122 @@ const ChatScreen = ({ route, navigation }) => {
     setupChat();
   }, [chatId, currentUser]);
 
-  // Location Handlers
+  const checkLocationPermission = async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        const status = await Geolocation.requestAuthorization('whenInUse');
+        setLocationPermissionGranted(status === 'granted');
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        setLocationPermissionGranted(granted);
+      }
+    } catch (err) {
+      console.warn('Error checking location permission:', err);
+    }
+  };
+
+  // Location Permission Handler
+  const requestLocationPermission = async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        const status = await Geolocation.requestAuthorization('whenInUse');
+        const granted = status === 'granted';
+        setLocationPermissionGranted(granted);
+        return granted;
+      }
+
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'This app needs access to your location to share it in chat.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        const isGranted = granted === PermissionsAndroid.RESULTS.GRANTED;
+        setLocationPermissionGranted(isGranted);
+        return isGranted;
+      }
+      return false;
+    } catch (err) {
+      console.warn('Location permission error:', err);
+      return false;
+    }
+  };
+
+  // Location Sharing Handler
+  const handleLocationShare = async () => {
+    if (!locationPermissionGranted) {
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        Alert.alert(
+          'Permission Required',
+          'Location permission is required to share your location.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    Geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          
+          const locationData = {
+            type: 'location',
+            sender: currentUser.uid,
+            latitude,
+            longitude,
+            createdAt: firestore.FieldValue.serverTimestamp(),
+          };
+
+          await firestore()
+            .collection('chats')
+            .doc(chatId)
+            .collection('messages')
+            .add(locationData);
+
+          await firestore()
+            .collection('chats')
+            .doc(chatId)
+            .update({
+              lastMessage: '📍 Location shared',
+              updatedAt: firestore.FieldValue.serverTimestamp()
+            });
+        } catch (error) {
+          console.error('Error sending location:', error);
+          Alert.alert('Error', 'Failed to send location');
+        } finally {
+          setIsLoading(false);
+          scrollToBottom();
+        }
+      },
+      (error) => {
+        setIsLoading(false);
+        console.error('Geolocation error:', error);
+        Alert.alert('Error', 'Failed to get location: ' + error.message);
+      },
+      { 
+        enableHighAccuracy: true, 
+        timeout: 15000, 
+        maximumAge: 10000,
+        distanceFilter: 10
+      }
+    );
+  };
 
   // Message Handlers
   const sendMessage = async () => {
@@ -178,6 +300,7 @@ const ChatScreen = ({ route, navigation }) => {
     }
   };
 
+  // File Upload Handler
   const handleFileUpload = async () => {
     try {
       const result = await DocumentPicker.pick({
@@ -188,7 +311,7 @@ const ChatScreen = ({ route, navigation }) => {
       const file = result[0];
       if (!file) return;
 
-      setIsLoading(true);
+      setModalState(prev => ({ ...prev, loading: true }));
 
       const base64Content = await RNFS.readFile(file.uri, 'base64');
       const imageData = `data:${file.type};base64,${base64Content}`;
@@ -209,10 +332,11 @@ const ChatScreen = ({ route, navigation }) => {
         Alert.alert('Error', 'Failed to upload file');
       }
     } finally {
-      setIsLoading(false);
+      setModalState(prev => ({ ...prev, loading: false }));
     }
   };
 
+  // File Message Handler
   const sendFileMessage = async (fileInfo) => {
     if (!chatId) return;
 
@@ -246,13 +370,7 @@ const ChatScreen = ({ route, navigation }) => {
     }
   };
 
-  // UI Helpers
-  const scrollToBottom = (animated = true) => {
-    if (flatListRef.current && messages.length > 0) {
-      flatListRef.current.scrollToEnd({ animated });
-    }
-  };
-
+  // Image Handling Functions
   const handleShareImage = async () => {
     try {
       if (!modalState.content) return;
@@ -278,12 +396,21 @@ const ChatScreen = ({ route, navigation }) => {
         }
       }
 
+      // Save image logic here
       Alert.alert('Success', 'Image saved to gallery');
     } catch (error) {
       Alert.alert('Error', 'Failed to save image');
     }
   };
 
+  // UI Helpers
+  const scrollToBottom = (animated = true) => {
+    if (flatListRef.current && messages.length > 0) {
+      flatListRef.current.scrollToEnd({ animated });
+    }
+  };
+
+  // Message Renderer
   const renderMessage = ({ item, index }) => {
     const isCurrentUser = item.sender === currentUser?.uid;
     const showDateHeader =
@@ -320,7 +447,19 @@ const ChatScreen = ({ route, navigation }) => {
                   : "bg-gray-100 rounded-bl-sm mr-2"
               }`}
             >
-              {item.type === "image" ? (
+              {item.type === "location" ? (
+                <TouchableOpacity
+                  onPress={() => handleLocationPress(item)}
+                  className="flex-row items-center"
+                >
+                  <Icon name="location" size={24} color={isCurrentUser ? "white" : "#666"} />
+                  <Text
+                    className={`ml-2 ${isCurrentUser ? "text-white" : "text-gray-800"}`}
+                  >
+                    View Location
+                  </Text>
+                </TouchableOpacity>
+              ) : item.type === "image" ? (
                 <TouchableOpacity
                   onPress={() =>
                     setModalState({
@@ -353,6 +492,7 @@ const ChatScreen = ({ route, navigation }) => {
     );
   };
 
+  // Loading State
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 bg-white justify-center items-center">
@@ -361,11 +501,12 @@ const ChatScreen = ({ route, navigation }) => {
     );
   }
 
+  // Main Render
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* Header */}
       <View className="flex-row items-center p-4 bg-white border-b border-gray-100">
-      <TouchableOpacity onPress={() => navigation.goBack()} className="mr-3">
+        <TouchableOpacity onPress={() => navigation.goBack()} className="mr-3">
           <Icon name="chevron-back" size={24} color="#666" />
         </TouchableOpacity>
 
@@ -462,6 +603,9 @@ const ChatScreen = ({ route, navigation }) => {
           <View className="flex-row items-end bg-gray-100 rounded-full px-4 py-2">
             <TouchableOpacity onPress={handleFileUpload} className="mr-3">
               <Icon name="image" size={24} color="#666" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLocationShare} className="mr-3">
+              <Icon name="location" size={24} color="#666" />
             </TouchableOpacity>
             <TextInput
               value={text}

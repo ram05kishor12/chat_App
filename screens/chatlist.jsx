@@ -127,6 +127,7 @@ const ChatScreen = ({ navigation }) => {
   
     return () => unsubscribe();
   }, [currentUser?.uid]);
+  
   // Users subscription
   useEffect(() => {
     if (!currentUser?.uid) return;
